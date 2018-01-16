@@ -82,7 +82,7 @@ module HelpScout
     #  Header   Status  Int    200
     #  Body     item
 
-    def self.request_item(auth, url, params = {})
+    def self.request_item(auth, url, params = {}, envelope_klass = SingleItemEnvelope)
       item = nil
 
       request_url = ""
@@ -100,7 +100,7 @@ module HelpScout
       end
 
       if 200 <= response.code && response.code < 300
-        envelope = SingleItemEnvelope.new(response)
+        envelope = envelope_klass.new(response)
         if envelope.item
           item = envelope.item
         end
@@ -899,6 +899,10 @@ module HelpScout
         puts "Could not create customer: #{e.message}"
         false
       end
+    end
+
+    def reports
+      return HelpScout::Reports.new(@auth)
     end
 
     def ratings(start_time, end_time, rating)

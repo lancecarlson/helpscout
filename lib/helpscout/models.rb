@@ -9,6 +9,7 @@
 # All date/times returned by the API are in ISO8601 format and in UTC timezone.
 
 require_relative 'rating.rb'
+require_relative 'reports.rb'
 
 module HelpScout
   # Response Envelopes
