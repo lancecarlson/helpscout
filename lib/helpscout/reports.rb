@@ -8,66 +8,134 @@ module HelpScout
       end
     end
 
+    class Query
+      def initialize(start_time, end_time, options = {})
+        @start_time = start_time
+        @end_time = end_time
+
+        if @start_time.is_a?(Time)
+          @start_time = @start_time.utc.iso8601
+        end
+
+        if @end_time.is_a?(Time)
+          @end_time = @end_time.utc.iso8601
+        end
+
+        @options = options
+
+        previousStart = @options[:previousStart]
+        previousEnd = @options[:previousEnd]
+        if previousStart.is_a?(Time)
+          @options[:previousStart] = previousStart.utc.iso8601
+        end
+
+        if previousEnd.is_a?(Time)
+          @options[:previousEnd] = previousEnd.utc.iso8601
+        end
+      end
+
+      def to_params
+        params = {
+          "start": @start_time,
+           "end": @end_time,
+           "page": 1
+        }.merge(@options)
+      end
+    end
+
+    class UsersQuery < Query
+      def initialize(start_time, end_time, user, options = {})
+        @user = user.to_i
+        options[:user] = @user
+        super(start_time, end_time, options)
+      end
+    end
+
     def initialize(auth)
       @auth = auth
     end
 
-    def conversations(start_time, end_time, options = {})
+    def conversations(query)
       url = "/reports/conversations.json"
 
-      if start_time.is_a?(Time)
-        start_time = start_time.utc.iso8601
+      begin
+        item = HelpScout::Client.request_item(@auth, url, query.to_params, ReportEnvelope)
+        Models::ConversationsReport.new(item)
+      rescue StandardError => e
+        puts "Request failed: #{e.message}"
       end
+    end
 
-      if end_time.is_a?(Time)
-        end_time = end_time.utc.iso8601
-      end
-
-      previous_start = options["previousStart"]
-      previous_end = options["previousEnd"]
-
-      if previous_start.is_a?(Time)
-        options["previousStart"] = previous_start.utc.iso8601
-      end
-
-      if previous_end.is_a?(Time)
-        options["previousEnd"] = previous_end.utc.iso8601
-      end
-
-      params = {
-        "start": start_time,
-        "end": end_time,
-        "page": 1
-      }.merge(options)
+    def users(query)
+      url = "/reports/user.json"
 
       begin
-        item = HelpScout::Client.request_item(@auth, url, params, ReportEnvelope)
-        report = Models::ConversationsReport.new(item)
-        #p report
-        report
+        item = HelpScout::Client.request_item(@auth, url, query.to_params, ReportEnvelope)
+        Models::UsersReport.new(item)
       rescue StandardError => e
         puts "Request failed: #{e.message}"
       end
     end
 
     module Models
-      class FilterTag
-        attr_reader :id, :name
+      module FilterTaggable
+        class FilterTag
+          attr_reader :id, :name
+
+          def initialize(object)
+            data = object.dup
+            @id = data.delete("id")
+            @name = data.delete("name")
+            # TODO: log extra data coming through
+          end
+        end
+
+        def parse_filter_tags(object)
+          @filterTags = []
+          object["filterTags"].each do |ft|
+            @filterTags << FilterTag.new(ft)
+          end
+        end
+      end
+
+      class Statistics
+        attr_reader :id, :count, :percent, :previousCount, :previousPercent, :deltaPercent
 
         def initialize(object)
-          data = object.clone
+          data = object.dup
           @id = data.delete("id")
           @name = data.delete("name")
+          @count = data.delete("count")
+          @previousCont = data.delete("previousCount")
+          @percent = data.delete("percent")
+          @previousPercent = data.delete("previousPercent")
+          @deltaPercent = data.delete("deltaPercent")
           # TODO: log extra data coming through
         end
       end
 
-      class ConversationsReport
-        attr_reader :day, :hour, :count
+      class TagStatistics < Statistics; end
+      class CustomerStatistics < Statistics; end
 
+      class ReplyStatistics < Statistics
+        attr_reader :mailboxId
+
+        def initialize(object)
+          super(object)
+          data = object.dup
+          @mailboxId = data.delete("mailboxId")
+          # TODO: log extra data coming through
+        end
+      end
+
+      class WorkflowStatistics < Statistics; end
+
+      class ConversationsReport
         class BusiestDay
+          attr_reader :day, :hour, :count
+
           def initialize(object)
-            data = object.clone
+            data = object.dup
             @day = data.delete("day")
             @hour = data.delete("hour")
             @count = data.delete("count")
@@ -79,7 +147,7 @@ module HelpScout
           attr_reader :startDate, :endDate, :totalConversations, :conversationsCreated, :newConversations, :customers, :messagesReceived, :days, :conversationsPerDay
 
           def initialize(object)
-            data = object.clone
+            data = object.dup
             @startDate = DateTime.iso8601(data.delete("startDate"))
             @endDate = DateTime.iso8601(data.delete("endDate"))
             @totalConversations = data.delete("totalConversations")
@@ -93,37 +161,7 @@ module HelpScout
           end
         end
 
-        class Statistics
-          attr_reader :id, :count, :percent, :previousCount, :previousPercent, :deltaPercent
-
-          def initialize(object)
-            data = object.clone
-            @id = data.delete("id")
-            @name = data.delete("name")
-            @count = data.delete("count")
-            @previousCont = data.delete("previousCount")
-            @percent = data.delete("percent")
-            @previousPercent = data.delete("previousPercent")
-            @deltaPercent = data.delete("deltaPercent")
-            # TODO: log extra data coming through
-          end
-        end
-
-        class TagStatistics < Statistics; end
-        class CustomerStatistics < Statistics; end
-
-        class ReplyStatistics < Statistics
-          attr_reader :mailboxId
-
-          def initialize(object)
-            super(object)
-            data = object.clone
-            @mailboxId = data.delete("mailboxId")
-            # TODO: log extra data coming through
-          end
-        end
-
-        class WorkflowStatistics < Statistics; end
+        include FilterTaggable
 
         # tagCount is specific to this library
         attr_reader :filterTags, :companyId, :busiestDay, :busyTimeStart, :busyTimeEnd,
@@ -137,11 +175,7 @@ module HelpScout
           @customers = object["customers"]
           @companyId = object["companyId"]
 
-          @filterTags = []
-          object["filterTags"].each do |ft|
-            @filterTags << FilterTag.new(ft)
-          end
-
+          parse_filter_tags(object)
           @busiestDay = BusiestDay.new(object["busiestDay"])
 
           @busyTimeStart = object["busyTimeStart"]
@@ -185,6 +219,70 @@ module HelpScout
         end
 
         private
+      end
+
+      class UsersReport
+        include FilterTaggable
+
+        class User
+          attr_reader :id, :name, :hasPhoto, :photoUrl, :totalCustomersHelped, :createdAt
+
+          def initialize(object)
+            data = object.dup
+            @id = data["id"].to_i
+            @name = data["name"]
+            @hasPhoto = data["hasPhoto"]
+            @photoUrl = data["photoUrl"]
+            @totalCustomersHelper = data["totalCustomersHelped"]
+            @createdAt = DateTime.iso8601(data.delete("createdAt"))
+          end
+        end
+
+        class UserStatistics
+          attr_reader :range
+
+          def initialize(object, range)
+            @range = range
+
+            data = object.dup
+            @startDate = DateTime.iso8601(data.delete("startDate"))
+            @endDate = DateTime.iso8601(data.delete("endDate"))
+            @totalDays = data.delete("totalDays").to_i
+            @resolved = data.delete("resolved").to_i
+            @conversationsCreated = data.delete("conversationsCreated").to_i
+            @closed = data.delete("closed").to_i
+            @totalReplies = data.delete("totalReplies").to_i
+            @resolvedOnFirstReply = data.delete("resolvedOnFirstReply").to_i
+            @percentResolvedOnFirstReply = data.delete("percentResolvedOnFirstReply")
+            @repliesToResolve = data.delete("repliesToResolve")
+            @handleTime = data.delete("handleTime")
+            @happinessScore = data.delete("happinessScore")
+            @responseTime = data.delete("responseTime").to_i
+            @resolutionTime = data.delete("resolutionTime")
+            @repliesPerDay = data.delete("repliesPerDay")
+            @averageFirstResponseTime = data.delete("averageFirstResponseTime")
+            @customersHelped = data.delete("customersHelped").to_i,
+            @totalConversations = data.delete("totalConversations").to_i
+            @busiestDay = data.delete("busiestDay").to_i
+
+            if range == :current
+              @conversationsPerDay = data.delete("conversationsPerDay")
+            end
+
+            pp data
+          end
+        end
+
+        attr_reader :filterTags, :user, :current, :previous
+
+        def initialize(object)
+          parse_filter_tags(object)
+          @user = User.new(object["user"])
+          @current = UserStatistics.new(object["current"], :current)
+          @previous = UserStatistics.new(object["previous"], :previous)
+          pp @previous
+          pp object.parsed_response["previous"]
+        end
       end
     end
   end
