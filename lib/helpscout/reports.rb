@@ -69,12 +69,12 @@ module HelpScout
     def users(query)
       url = "/reports/user.json"
 
-      begin
+      #begin
         item = HelpScout::Client.request_item(@auth, url, query.to_params, ReportEnvelope)
         Models::UsersReport.new(item)
-      rescue StandardError => e
-        puts "Request failed: #{e.message}"
-      end
+      #rescue StandardError => e
+      #  puts "Request failed: #{e.message}"
+      #end
     end
 
     module Models
@@ -239,14 +239,27 @@ module HelpScout
         end
 
         class UserStatistics
+          attr_reader :startDate, :endDate,
+                      :totalDays, :resolved, :conversationsCreated, :closed,
+                      :totalReplies, :resolvedOnFirstReply, :percentResolvedOnFirstReply, :repliesToResolve,
+                      :handleTime, :happinessScore, :responseTime, :resolutionTime,
+                      :repliesPerDay, :averageFirstResponseTime, :customersHelped, :totalConversations,
+                      :busiestDay, :conversationsPerDay
           attr_reader :range
+
 
           def initialize(object, range)
             @range = range
 
             data = object.dup
-            @startDate = DateTime.iso8601(data.delete("startDate"))
-            @endDate = DateTime.iso8601(data.delete("endDate"))
+
+            if range == :deltas
+              @activeConversations = data.delete("activeConversations")
+            else
+              @startDate = DateTime.iso8601(data.delete("startDate"))
+              @endDate = DateTime.iso8601(data.delete("endDate"))
+            end
+
             @totalDays = data.delete("totalDays").to_i
             @resolved = data.delete("resolved").to_i
             @conversationsCreated = data.delete("conversationsCreated").to_i
@@ -264,24 +277,18 @@ module HelpScout
             @customersHelped = data.delete("customersHelped").to_i,
             @totalConversations = data.delete("totalConversations").to_i
             @busiestDay = data.delete("busiestDay").to_i
-
-            if range == :current
-              @conversationsPerDay = data.delete("conversationsPerDay")
-            end
-
-            pp data
+            @conversationsPerDay = data.delete("conversationsPerDay")
           end
         end
 
-        attr_reader :filterTags, :user, :current, :previous
+        attr_reader :filterTags, :user, :current, :previous, :deltas
 
         def initialize(object)
           parse_filter_tags(object)
           @user = User.new(object["user"])
           @current = UserStatistics.new(object["current"], :current)
           @previous = UserStatistics.new(object["previous"], :previous)
-          pp @previous
-          pp object.parsed_response["previous"]
+          @delta = UserStatistics.new(object["deltas"], :deltas)
         end
       end
     end
