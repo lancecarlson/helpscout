@@ -55,8 +55,10 @@ module HelpScout
       @auth = auth
     end
 
-    def conversations(query)
+    def conversations(start_time, end_time, options = {})
       url = "/reports/conversations.json"
+
+      query = Query.new(start_time, end_time, options)
 
       begin
         item = HelpScout::Client.request_item(@auth, url, query.to_params, ReportEnvelope)
@@ -66,8 +68,10 @@ module HelpScout
       end
     end
 
-    def users(query)
+    def users(start_time, end_time, user, options = {})
       url = "/reports/user.json"
+
+      query = UsersQuery.new(start_time, end_time, user, options)
 
       begin
         item = HelpScout::Client.request_item(@auth, url, query.to_params, ReportEnvelope)
