@@ -69,12 +69,12 @@ module HelpScout
     def users(query)
       url = "/reports/user.json"
 
-      #begin
+      begin
         item = HelpScout::Client.request_item(@auth, url, query.to_params, ReportEnvelope)
         Models::UsersReport.new(item)
-      #rescue StandardError => e
-      #  puts "Request failed: #{e.message}"
-      #end
+      rescue StandardError => e
+        puts "Request failed: #{e.message}"
+      end
     end
 
     module Models
