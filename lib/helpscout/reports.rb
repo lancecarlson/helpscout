@@ -68,6 +68,19 @@ module HelpScout
       end
     end
 
+    def company(start_time, end_time, options = {})
+      url = "/reports/company.json"
+
+      query = Query.new(start_time, end_time, options)
+
+      #begin
+        item = HelpScout::Client.request_item(@auth, url, query.to_params, ReportEnvelope)
+        Models::CompanyReport.new(item)
+      #rescue StandardError => e
+      #  puts "Request failed: #{e.message}"
+      #end
+    end
+
     def users(start_time, end_time, user, options = {})
       url = "/reports/user.json"
 
@@ -165,6 +178,51 @@ module HelpScout
           end
         end
 
+        class CustomField
+          class Value
+            attr_reader :id, :name, :count, :percent
+
+            def initialize(object)
+              data = object.dup
+              @id = data.delete("id").to_i
+              @name = data.delete("name")
+              @count = data.delete("count").to_i
+              @percent = data.delete("percent")
+            end
+          end
+
+          class Summary
+            attr_reader :total, :totalAnswered, :previousTotal, :previousTotalAnswered, :unansweredDelta, :unansweredPreviousPercent, :unansweredPercent
+
+            def initialize(object)
+              data = object.dup
+              @total = data.delete("total").to_i
+              @totalAnswered = data.delete("totalAnswered").to_i
+              @previousTotal = data.delete("previousTotal")
+              @previousTotalAnswered = data.delete("previousTotalAnswered")
+              @unansweredDelta = data.delete("unansweredDelta")
+              @unansweredPreviousPercent = data.delete("unansweredPreviousPercent")
+              @unansweredPercent = data.delete("unansweredPercent")
+            end
+          end
+
+          attr_reader :id, :name, :mailboxId, :values, :summary
+
+          def initialize(object)
+            data = object.dup
+            @id = data.delete("id").to_i
+            @name = data.delete("name")
+            @mailboxId = data.delete("mailboxId").to_i
+
+            @values = []
+            data.delete["values"].each do |value|
+              @values << Value.new(value)
+            end
+
+            @summary = Summary.new(data.delete("summary"))
+          end
+        end
+
         include FilterTaggable
 
         # tagCount is specific to this library
@@ -219,10 +277,80 @@ module HelpScout
             @workflows << WorkflowStatistics.new(workflow)
           end
 
+          @customFields = []
           @customFieldCount = object["customFields"]["count"]
+
+          object["customFields"]["fields"].each do |field|
+            @customFields << CustomField.new(field)
+          end
         end
 
         private
+      end
+
+      class CompanyReport
+        include FilterTaggable
+
+        class User
+          attr_reader :name, :user, :handleTime, :replies, :customersHelped, :closed, :happinessScore, :previousHandleTime, :previousReplies, :previousCustomersHelped, :previousClosed, :previousHappinessScore
+
+          def initialize(object)
+            data = object.dup
+            @name = data.delete("name")
+            @user = data.delete("user").to_i
+            @handleTime = data.delete("handleTime")
+            @replies = data.delete("replies").to_i
+            @customersHelped = data.delete("customersHelped").to_i
+            @closed = data.delete("closed").to_i
+            @happinessScore = data.delete("happinessScore")
+            @previousHandleTime = data.delete("previousHandleTime")
+            @previousReplies = data.delete("previousReplies")
+            @previousCustomersHelped = data.delete("previousCustomersHelped")
+            @previousClosed = data.delete("previousClosed")
+            @previousHappinessScore = data.delete("previousHappinessScore")
+          end
+        end
+
+        class Performance
+          attr_reader :startDate, :endDate, :customersHelped, :closed, :totalReplies, :totalUsers, :totalDays, :repliesPerDayPerUser, :repliesPerDay, :resolvedPerDay
+          attr_reader :range
+
+          def initialize(object, range)
+            @range = range
+            data = object.dup
+
+            if range == :deltas
+            else
+              @startDate = DateTime.iso8601(data.delete("startDate"))
+              @endDate = DateTime.iso8601(data.delete("endDate"))
+            end
+
+            @customersHelped = data.delete("customersHelped").to_i
+            @closed = data.delete("closed").to_i
+            @totalReplies = data.delete("totalReplies").to_i
+            @totalUsers = data.delete("totalUsers").to_i
+            @totalDays = data.delete("totalDays").to_i
+            @repliesPerDayPerUser = data.delete("repliesPerDayPerUser")
+            @repliesPerDay = data.delete("repliesPerDay")
+            @resolvedPerDay = data.delete("resolvedPerDay")
+          end
+        end
+
+        def initialize(object)
+          data = object.dup
+          @current = Performance.new(data.delete("current"), :current)
+
+          if data.key?("previous")
+            @previous = Performance.new(data.delete("previous"), :previous)
+          end
+
+          @deltas = Performance.new(data.delete("deltas"), :deltas)
+
+          @users = []
+          object["users"].each do |user|
+            @users << User.new(user)
+          end
+        end
       end
 
       class UsersReport
@@ -233,11 +361,11 @@ module HelpScout
 
           def initialize(object)
             data = object.dup
-            @id = data["id"].to_i
-            @name = data["name"]
-            @hasPhoto = data["hasPhoto"]
-            @photoUrl = data["photoUrl"]
-            @totalCustomersHelper = data["totalCustomersHelped"]
+            @id = data.delete("id").to_i
+            @name = data.delete("name")
+            @hasPhoto = data.delete("hasPhoto")
+            @photoUrl = data.delete("photoUrl")
+            @totalCustomersHelper = data.delete("totalCustomersHelped")
             @createdAt = DateTime.iso8601(data.delete("createdAt"))
           end
         end

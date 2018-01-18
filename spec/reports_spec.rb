@@ -14,6 +14,19 @@ describe "Reports" do
     }
 
     resp = helpscout.reports.conversations(start_time, end_time, opts)
+    #p resp
+  end
+
+  it "should show company overall report" do
+    start_time = Time.now - 5000000
+    end_time = Time.now
+
+    opts = {
+      "previousStart": Time.now - 100000,
+       "previousEnd": Time.now - 50000
+    }
+
+    resp = helpscout.reports.company(start_time, end_time, opts)
     p resp
   end
 
@@ -26,11 +39,11 @@ describe "Reports" do
       "previousEnd": Time.now - 50000
     }
 
-    resp = helpscout.reports.users(start_time, end_time, user, opts)
-    expect(resp).to respond_to(:filterTags)
-    expect(resp).to respond_to(:user)
-    expect(resp).to respond_to(:current)
-    expect(resp).to respond_to(:previous)
-    expect(resp).to respond_to(:deltas)
+    #resp = helpscout.reports.users(start_time, end_time, user, opts)
+    #expect(resp).to respond_to(:filterTags)
+    #expect(resp).to respond_to(:user)
+    #expect(resp).to respond_to(:current)
+    #expect(resp).to respond_to(:previous)
+    #expect(resp).to respond_to(:deltas)
   end
 end
